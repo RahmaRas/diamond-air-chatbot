@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diamond Air Support</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f0f4f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .da-wrap { display: flex; flex-direction: column; height: 600px; width: 420px; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+    .da-header { background: #1a3a6b; color: #fff; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
+    .da-title { font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+    .da-online { font-size: 12px; color: #7fe3b0; display: flex; align-items: center; gap: 4px; }
+    .da-dot { width: 7px; height: 7px; border-radius: 50%; background: #7fe3b0; }
+    .da-esc { background: #fff; color: #1a3a6b; border: none; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; }
+    .da-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #f5f7fa; }
+    .da-msg { display: flex; flex-direction: column; max-width: 78%; }
+    .da-msg.user { align-self: flex-end; align-items: flex-end; }
+    .da-msg.bot { align-self: flex-start; align-items: flex-start; }
+    .da-bubble { padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.5; }
+    .da-msg.bot .da-bubble { background: #fff; border: 1px solid #e2e8f0; color: #1a202c; border-radius: 4px 18px 18px 18px; }
+    .da-msg.user .da-bubble { background: #1a3a6b; color: #fff; border-radius: 18px 18px 4px 18px; }
+    .da-time { font-size: 11px; color: #a0aec0; margin-top: 3px; padding: 0 4px; }
+    .da-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e2e8f0; background: #fff; }
+    .da-input-row input { flex: 1; padding: 9px 14px; border-radius: 22px; border: 1px solid #e2e8f0; font-size: 14px; background: #f5f7fa; color: #1a202c; outline: none; }
+    .da-input-row input:focus { border-color: #1a3a6b; }
+    .da-send { background: #1a3a6b; color: #fff; border: none; border-radius: 50%; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; }
+    .da-send:hover { background: #14305a; }
+    .da-typing span { width: 7px; height: 7px; border-radius: 50%; background: #a0aec0; display: inline-block; animation: blink 1.2s infinite; margin: 0 2px; }
+    .da-typing span:nth-child(2) { animation-delay: 0.2s; }
+    .da-typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+    .da-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .da-chip { background: #ebf4ff; color: #1a3a6b; font-size: 12px; padding: 4px 10px; border-radius: 12px; cursor: pointer; border: 1px solid #bee3f8; }
+    .da-chip:hover { background: #bee3f8; }
+  </style>
+</head>
+<body>
+<div class="da-wrap">
+  <div class="da-header">
+    <div class="da-title">
+      <i class="ti ti-plane" style="font-size:18px;"></i>
+      Diamond Air Support
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="da-online"><div class="da-dot"></div>Online</div>
+      <button class="da-esc" onclick="escalate()">Escalate</button>
+    </div>
+  </div>
+  <div class="da-msgs" id="msgs"></div>
+  <div class="da-input-row">
+    <input id="inp" type="text" placeholder="Type your message..." onkeydown="if(event.key==='Enter')send()" />
+    <button class="da-send" onclick="send()" aria-label="Send"><i class="ti ti-send"></i></button>
+  </div>
+</div>
+
+<script>
+const ANTHROPIC_API_KEY = 'YOUR_API_KEY_HERE';
+
+const msgs = document.getElementById('msgs');
+const inp = document.getElementById('inp');
+const history = [];
+
+const systemPrompt = `You are a friendly customer support agent for Diamond Air airlines. Help customers book flights conversationally.
+When booking: ask for departure city and preferred airport if multiple exist, ask for destination, ask for travel date and time, ask if one-way or round trip, suggest a realistic fictional flight (Diamond Air flight number, time, fare $100-500), confirm details before booking, offer GooglePay or payment link, give a confirmation code like "DIA" + 4 random digits.
+Keep responses concise (2-4 sentences). Be warm and helpful.`;
+
+function now() {
+  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+
+function addMsg(text, role, chips=[]) {
+  const div = document.createElement('div');
+  div.className = `da-msg ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'da-bubble';
+  bubble.textContent = text;
+  const time = document.createElement('div');
+  time.className = 'da-time';
+  time.textContent = now();
+  div.appendChild(bubble);
+  div.appendChild(time);
+  if (chips.length) {
+    const row = document.createElement('div');
+    row.className = 'da-chips';
+    chips.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'da-chip';
+      btn.textContent = c;
+      btn.onclick = () => { inp.value = c; send(); };
+      row.appendChild(btn);
+    });
+    div.appendChild(row);
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping() {
+  const div = document.createElement('div');
+  div.className = 'da-msg bot';
+  div.id = 'typing';
+  div.innerHTML = '<div class="da-bubble"><span class="da-typing"><span></span><span></span><span></span></span></div>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function escalate() {
+  addMsg("Connecting you to a human agent now. Please hold — average wait time is 2 minutes.", 'bot');
+}
+
+async function send() {
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  addMsg(text, 'user');
+  history.push({ role: 'user', content: text });
+  showTyping();
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompt, messages: history })
+    });
+    const data = await res.json();
+    const reply = data.content?.map(b => b.text).filter(Boolean).join('') || "Sorry, I couldn't process that.";
+    removeTyping();
+    history.push({ role: 'assistant', content: reply });
+    addMsg(reply, 'bot');
+  } catch(e) {
+    removeTyping();
+    addMsg("Sorry, I'm having trouble connecting. Please try again shortly.", 'bot');
+  }
+}
+
+addMsg("Hi there! Welcome to Diamond Air support. I can help you book flights, check fares, and more. Where would you like to fly today?", 'bot', ['Book a flight', 'Check flight status', 'Baggage info']);
+</script>
+</body>
+</html>

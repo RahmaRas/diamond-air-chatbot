@@ -56,7 +56,8 @@
 </div>
 
 <script>
-const ANTHROPIC_API_KEY = 'YOUR_API_KEY_HERE';
+const API_KEY = 'AQ.Ab8RN6IQXqrDKSNRsT1sCOklzk0F71dsXaH3JBQxxFR6YaVKIQ';
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
 const msgs = document.getElementById('msgs');
 const inp = document.getElementById('inp');
@@ -67,7 +68,7 @@ When booking: ask for departure city and preferred airport if multiple exist, as
 Keep responses concise (2-4 sentences). Be warm and helpful.`;
 
 function now() {
-  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 
 function addMsg(text, role, chips=[]) {
@@ -120,18 +121,21 @@ async function send() {
   if (!text) return;
   inp.value = '';
   addMsg(text, 'user');
-  history.push({ role: 'user', content: text });
+  history.push({ role: 'user', parts: [{ text }] });
   showTyping();
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system: systemPrompt, messages: history })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: history
+      })
     });
     const data = await res.json();
-    const reply = data.content?.map(b => b.text).filter(Boolean).join('') || "Sorry, I couldn't process that.";
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't process that.";
     removeTyping();
-    history.push({ role: 'assistant', content: reply });
+    history.push({ role: 'model', parts: [{ text: reply }] });
     addMsg(reply, 'bot');
   } catch(e) {
     removeTyping();
